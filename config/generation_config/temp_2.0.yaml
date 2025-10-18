@@ -1,0 +1,4 @@
+max_new_tokens: ${dataset.max_answer_tokens}
+do_sample: true
+temperature: 2.0
+min_new_tokens: 1

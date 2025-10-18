@@ -1,0 +1,12 @@
+# Slightly modified short prompt from SEP method (https://arxiv.org/abs/2406.15927)
+content: |
+  Deliver a succinct and straightforward answer to the question below. Focus on being brief while maintaining essential information. Keep extra details to a minimum.
+
+  Here is an example:
+  Question: What is the Riemann hypothesis?
+  Answer: All non-trivial zeros of the Riemann zeta function have real part 1/2
+
+  Question: {question}
+  Answer:
+question_key: question
+context_key: null

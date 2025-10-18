@@ -1,0 +1,11 @@
+# Credit: https://www.nature.com/articles/s41586-024-07421-0
+content: |
+  We are assessing the quality of answers to the following question: {{ question }}
+  The following are expected answers to this  question: {{ gold_answer }}
+  The proposed answer is: {{predicted answer}}
+  Within the context of the question, does the proposed answer mean the same as any of the expected answers? Respond only with 'correct', 'incorrect' or 'not_known'.
+question_key: question
+predicted_answer_key: predicted_answer
+gold_answer_key: gold_answer
+possible_answers: ["correct", "incorrect", "not_known"]
+separate_multi_answers: true

@@ -1,0 +1,4 @@
+name: gpt_4.1
+version: gpt-4.1-2025-04-14
+base_url: null
+batch_size: 8

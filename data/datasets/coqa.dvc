@@ -1,0 +1,6 @@
+outs:
+- md5: ebca026de4ea3fd8e75b5f90f8203c41.dir
+  size: 9090845
+  nfiles: 1
+  hash: md5
+  path: coqa

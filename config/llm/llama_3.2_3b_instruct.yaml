@@ -1,0 +1,8 @@
+name: meta-llama/Llama-3.2-3B-Instruct
+tokenizer_name: ${.name}
+tokenizer_padding_side: left
+context_size: 128_000
+compile: true
+torch_dtype: bfloat16
+attn_implementation: eager
+quantization: null

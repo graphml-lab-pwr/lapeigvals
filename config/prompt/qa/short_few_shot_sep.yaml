@@ -1,0 +1,23 @@
+# Slightly modified short prompt from SEP method (https://arxiv.org/abs/2406.15927)
+content: |
+  Answer the following question as briefly as possible.
+  Here are several examples:
+  Question: What is the capital of France?
+  Answer: Paris
+
+  Question: Who wrote *Romeo and Juliet*?
+  Answer: William Shakespeare
+
+  Question: What is the boiling point of water in Celsius?
+  Answer: 100°C
+
+  Question: How many continents are there on Earth?
+  Answer: Seven
+
+  Question: What is the fastest land animal?
+  Answer: Cheetah
+
+  Question: {question}
+  Answer:
+question_key: question
+context_key: null

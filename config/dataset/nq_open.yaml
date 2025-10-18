@@ -1,0 +1,5 @@
+name: google-research-datasets/nq_open
+cls_path: hallucinations.config.QaDatasetConfig
+test_split_name: validation
+max_answer_tokens: 50 # llama-3.1 tokenizer (without special tokens): {'max': 24, 'mean': 4.63083385334687, 'median': 4, 'min': 2}
+target_column_name: answer

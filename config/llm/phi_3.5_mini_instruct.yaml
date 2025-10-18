@@ -1,0 +1,8 @@
+name: microsoft/Phi-3.5-mini-instruct
+tokenizer_name: ${.name}
+tokenizer_padding_side: left
+context_size: 128_000
+compile: true
+torch_dtype: bfloat16
+attn_implementation: eager
+quantization: null

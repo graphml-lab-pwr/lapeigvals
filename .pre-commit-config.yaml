@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+        name: End-of-file fixer
+      - name: mixed-line-ending
+        id: mixed-line-ending
+        args: [--fix, lf]
+      - id: trailing-whitespace
+        name: Remove trailing whitespaces
+      - id: check-toml
+        name: Check toml
+      - id: check-yaml
+        name: Check yaml
+        args: [--allow-multiple-documents]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.1
+    hooks:
+      - id: ruff
+        name: Ruff Linter
+        args: [--fix, --exit-non-zero-on-fix]
+        exclude: ^notebooks/
+      - id: ruff-format
+        name: Ruff Formatter
+        exclude: ^notebooks/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
+        name: Gitleaks
+        language_version: 1.23.6 # due to: https://github.com/gitleaks/gitleaks/issues/1751
+
+exclude: 'data/|dvc.lock'

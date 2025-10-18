@@ -1,0 +1,6 @@
+name: gsm8k
+path: openai/gsm8k
+cls_path: hallucinations.config.QaDatasetConfig
+test_split_name: test
+max_answer_tokens: 512
+target_column_name: answer

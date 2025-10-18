@@ -1,0 +1,4 @@
+name: gpt_4o_mini
+version: gpt-4o-mini-2024-07-18
+base_url: null
+batch_size: 16

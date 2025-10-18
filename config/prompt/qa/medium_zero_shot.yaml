@@ -1,0 +1,6 @@
+content: |
+  Please provide a concise and direct response to the following question, keeping your answer as brief and to-the-point as possible while ensuring clarity. Avoid any unnecessary elaboration or additional details.
+  Question: {question}
+  Answer:
+question_key: question
+context_key: null

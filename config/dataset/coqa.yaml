@@ -1,0 +1,7 @@
+name: coqa
+path: data/datasets/coqa/coqa-dev-v1.0.json
+subset: null
+cls_path: hallucinations.config.QaDatasetConfig
+test_split_name: null
+max_answer_tokens: 40 # llama-3.1 tokenizer (without special tokens)
+target_column_name: answer

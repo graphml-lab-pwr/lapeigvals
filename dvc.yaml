@@ -1,0 +1,618 @@
+stages:
+  generate_attentions_only: # use with CUDA_VISIBLE_DEVICES and NUM_PROC
+    desc: "Runs LLM inference and stores attention diagonals"
+    matrix: &act_attn_only_config
+      llm:
+        - llama_3.1_8b_instruct
+        - llama_3.2_3b_instruct
+        - phi_3.5_mini_instruct
+        - mistral_nemo_2407
+        - mistral_small_24b_instruct_2501
+      dataset_prompt:
+        - dataset: nq_open
+          prompt: short_few_shot_sep
+        - dataset: halueval_qa
+          prompt: short_few_shot_sep
+        - dataset: trivia_qa
+          prompt: short_few_shot_sep
+        - dataset: squad_v2
+          prompt: short_few_shot_sep
+        - dataset: truthful_qa
+          prompt: short_few_shot_sep
+        - dataset: coqa
+          prompt: short_few_shot_sep
+        - dataset: gsm8k
+          prompt: gsm8k
+      generation_config:
+        - temp_0.1
+        - temp_1.0
+      seed:
+        - 42
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_activations.py
+      dataset=${item.dataset_prompt.dataset}
+      llm=${item.llm}
+      generation_config=${item.generation_config}
+      prompt=qa/${item.dataset_prompt.prompt}
+      stored_features=attention_diags
+      batch_size=1
+      results_dir=./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      random_seed=${item.seed}
+    deps:
+      - scripts/dataset/generate_activations.py
+      - config/llm/${item.llm}.yaml
+      - config/generation_config/${item.generation_config}.yaml
+      - config/dataset/${item.dataset_prompt.dataset}.yaml
+      - config/generate_activations.yaml
+      - config/prompt/qa/${item.dataset_prompt.prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/answers.json
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/config.yaml
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/attentions
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/attn_diags.pt
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+        : cache: false
+
+  eval_answers_ngram:
+    desc: "Evaluates LLM answers using n-gram-based metrics"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/compute_qa_metrics.py
+      --answers-file=./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/compute_qa_metrics.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/answers.json
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/metrics.json
+        : cache: false
+
+  eval_answers_llm_judge:
+    desc: "Evaluates LLM answers using LLM-as-judge metrics"
+    matrix: &llm_judge_models_config # We discard the gsm8k dataset because it's evaluated with exact match
+      llm:
+        - llama_3.1_8b_instruct
+        - llama_3.2_3b_instruct
+        - phi_3.5_mini_instruct
+        - mistral_nemo_2407
+        - mistral_small_24b_instruct_2501
+      dataset_prompt:
+        - dataset: nq_open
+          prompt: short_few_shot_sep
+        - dataset: halueval_qa
+          prompt: short_few_shot_sep
+        - dataset: trivia_qa
+          prompt: short_few_shot_sep
+        - dataset: squad_v2
+          prompt: short_few_shot_sep
+        - dataset: truthful_qa
+          prompt: short_few_shot_sep
+        - dataset: coqa
+          prompt: short_few_shot_sep
+      generation_config:
+        - temp_0.1
+        - temp_1.0
+      seed:
+        - 42
+      judge_prompt:
+        - qa_orgad_et_al_eval
+      judge_llm_api:
+        - gpt_4o_mini
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/llm_as_judge.py
+      llm_api=${item.judge_llm_api}
+      prompt=llm_as_judge/${item.judge_prompt}
+      answers_file=./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/llm_as_judge.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/answers.json
+      - config/llm_as_judge.yaml
+      - config/llm_api/${item.judge_llm_api}.yaml
+      - config/prompt/llm_as_judge/${item.judge_prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_${item.judge_llm_api}_${item.judge_prompt}.json
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_${item.judge_llm_api}_${item.judge_prompt}.yaml
+        : cache: false
+
+  generate_labels:
+    desc: "Based on n-gram-based metrics and LLM-as-judge results, generates labels for the dataset"
+    matrix:
+      <<: *llm_judge_models_config
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_labels.py
+      --dataset-dir ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      --llm-judge-prompt qa_orgad_et_al_eval
+      --llm-judge-llm gpt_4o_mini
+    deps:
+      - scripts/dataset/generate_labels.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/metrics.json
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_gpt_4o_mini_qa_orgad_et_al_eval.json
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_gpt_4o_mini_qa_orgad_et_al_eval.yaml
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/labels.pt
+        : cache: false
+
+  generate_labels_gsm8k:
+    desc: "Generate labels for the gsm8k dataset with exact match"
+    matrix:
+      llm:
+        - llama_3.1_8b_instruct
+        - llama_3.2_3b_instruct
+        - phi_3.5_mini_instruct
+        - mistral_nemo_2407
+        - mistral_small_24b_instruct_2501
+      generation_config:
+        - temp_0.1
+        - temp_1.0
+      seed:
+        - 42
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_labels_gsm8k.py
+      --dataset-dir ./data/activations/gsm8k/${item.llm}/${item.generation_config}__prompt_qa_gsm8k__seed_${item.seed}
+    deps:
+      - scripts/dataset/generate_labels_gsm8k.py
+      - ./data/activations/gsm8k/${item.llm}/${item.generation_config}__prompt_qa_gsm8k__seed_${item.seed}/answers.json
+    outs:
+      - ? ./data/activations/gsm8k/${item.llm}/${item.generation_config}__prompt_qa_gsm8k__seed_${item.seed}/labels.pt
+        : cache: false
+
+  generate_split:
+    desc: "Based on the labels, generates stratified split for the dataset"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_split.py
+      --dataset-dir ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      --test-size 0.2
+      --seed 42
+      --overwrite
+    deps:
+      - scripts/dataset/generate_split.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/labels.pt
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/split.pt
+        : cache: false
+
+  ### ================ Probes ================ ###
+  train_attn_vs_laplacian_pca:
+    desc: "Run probe experiments for attn vs laplacian (main experiment)"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/probes/train_attn_vs_laplacian.py
+      --dataset-dir ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      --pca-dim 512
+    deps:
+      - scripts/probes/train_attn_vs_laplacian.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/attn_diags.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/labels.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/split.pt
+    outs:
+      - ./data/results/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/attn_vs_laplacian_pca_512_results.pkl
+
+  probe_attn_score:
+    desc: "Evaluates AttentionScore performance on the dataset (LLMCheck paper)"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/probes/probe_attn_score.py
+      --dataset-dir ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+    deps:
+      - scripts/probes/probe_attn_score.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/attn_diags.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/labels.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/split.pt
+    outs:
+      - ./data/results/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/attn_score.pkl
+
+  ### ===================================== Temperature Ablation =========================================== ###
+  generate_ablation_features_temp: # use with CUDA_VISIBLE_DEVICES and NUM_PROC
+    desc: "Run experiemnts for different temperatures ablation"
+    matrix: &temp_ablation_matrix
+      llm:
+        - llama_3.1_8b_instruct
+      dataset:
+        - trivia_qa
+      prompt:
+        - short_few_shot_sep
+      generation_config:
+        - temp_0.5
+        - temp_2.0
+        - temp_5.0
+      seed:
+        - 42
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_activations.py
+      dataset=${item.dataset}
+      llm=${item.llm}
+      generation_config=${item.generation_config}
+      prompt=${item.prompt}
+      stored_features=attention_diags
+      batch_size=1
+      results_dir=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      random_seed=${item.seed}
+    deps:
+      - scripts/dataset/generate_activations.py
+      - config/llm/${item.llm}.yaml
+      - config/generation_config/${item.generation_config}.yaml
+      - config/dataset/${item.dataset}.yaml
+      - config/generate_activations.yaml
+      - config/prompt/qa/${item.prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/config.yaml
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/attentions
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/attn_diags.pt
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+        : cache: false
+
+  eval_answers_ngram_temp_ablation:
+    desc: "Evaluates LLM answers using n-gram-based metrics for different temperatures ablation"
+    matrix:
+      <<: *temp_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/compute_qa_metrics.py
+      --answers-file=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/compute_qa_metrics.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/metrics.json
+        : cache: false
+
+  eval_answers_llm_judge_temp_ablation:
+    desc: "Evaluates LLM answers using LLM-as-judge metrics for different temperatures ablation"
+    matrix:
+      <<: *temp_ablation_matrix
+      judge_prompt:
+        - qa_orgad_et_al_eval
+      judge_llm_api:
+        - gpt_4o_mini
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/llm_as_judge.py
+      llm_api=${item.judge_llm_api}
+      prompt=llm_as_judge/${item.judge_prompt}
+      answers_file=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/llm_as_judge.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+      - config/llm_as_judge.yaml
+      - config/llm_api/${item.judge_llm_api}.yaml
+      - config/prompt/llm_as_judge/${item.judge_prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_${item.judge_llm_api}_${item.judge_prompt}.json
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_${item.judge_llm_api}_${item.judge_prompt}.yaml
+        : cache: false
+
+  generate_labels_temp_ablation:
+    desc: "Based on the labels, generates stratified split for the dataset"
+    matrix:
+      <<: *temp_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_labels.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --llm-judge-prompt qa_orgad_et_al_eval
+      --llm-judge-llm-api gpt_4o_mini
+    deps:
+      - scripts/dataset/generate_labels.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_gpt_4o_mini_qa_orgad_et_al_eval.json
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_gpt_4o_mini_qa_orgad_et_al_eval.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+        : cache: false
+
+  generate_split_temp_ablation:
+    desc: "Based on the labels, generates stratified split for the dataset"
+    matrix:
+      <<: *temp_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_split.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --test-size 0.2
+      --seed 42
+      --overwrite
+    deps:
+      - scripts/dataset/generate_split.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/split.pt
+        : cache: false
+
+  train_attn_vs_laplacian_pca_temp_ablation:
+    desc: "Runs probe experiments for different temperatures ablation"
+    matrix:
+      <<: *temp_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/probes/train_attn_vs_laplacian.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --pca-dim 512
+    deps:
+      - scripts/probes/train_attn_vs_laplacian.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/attn_diags.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/split.pt
+    outs:
+      - ./data/results/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/attn_vs_laplacian_pca_512_results.pkl
+
+  ### ===================================== Prompt Ablation =========================================== ###
+  generate_ablation_features_prompt: # use with CUDA_VISIBLE_DEVICES and NUM_PROC
+    desc: "Run experiemnts for different prompts ablation"
+    matrix: &prompt_ablation_matrix
+      llm:
+        - llama_3.1_8b_instruct
+      dataset:
+        - trivia_qa
+      prompt:
+        - short_zero_shot
+        - medium_one_shot
+        - medium_zero_shot
+      generation_config:
+        - temp_0.1
+        - temp_1.0
+      seed:
+        - 42
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_activations.py
+      dataset=${item.dataset}
+      llm=${item.llm}
+      generation_config=${item.generation_config}
+      prompt=${item.prompt}
+      stored_features=attention_diags
+      batch_size=1
+      results_dir=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      random_seed=${item.seed}
+    deps:
+      - scripts/dataset/generate_activations.py
+      - config/llm/${item.llm}.yaml
+      - config/generation_config/${item.generation_config}.yaml
+      - config/dataset/${item.dataset}.yaml
+      - config/generate_activations.yaml
+      - config/prompt/qa/${item.prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/config.yaml
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/attentions
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/attn_diags.pt
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+        : cache: false
+
+  eval_answers_ngram_prompt_ablation:
+    desc: "Evaluates LLM answers using n-gram-based metrics for different prompts ablation"
+    matrix:
+      <<: *prompt_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/compute_qa_metrics.py
+      --answers-file=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/compute_qa_metrics.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/metrics.json
+        : cache: false
+
+  eval_answers_llm_judge_prompt_ablation:
+    desc: "Evaluates LLM answers using LLM-as-judge metrics for different prompts ablation"
+    matrix:
+      <<: *prompt_ablation_matrix
+      judge_prompt:
+        - qa_orgad_et_al_eval
+      judge_llm_api:
+        - gpt_4o_mini
+    cmd: >-
+      PYTHONPATH=. python scripts/eval/llm_as_judge.py
+      llm_api=${item.judge_llm_api}
+      prompt=llm_as_judge/${item.judge_prompt}
+      answers_file=./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+    deps:
+      - scripts/eval/llm_as_judge.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/answers.json
+      - config/llm_as_judge.yaml
+      - config/llm_api/${item.judge_llm_api}.yaml
+      - config/prompt/llm_as_judge/${item.judge_prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_${item.judge_llm_api}_${item.judge_prompt}.json
+        : cache: false
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_${item.judge_llm_api}_${item.judge_prompt}.yaml
+        : cache: false
+
+  generate_labels_prompt_ablation:
+    desc: "Based on the labels, generates stratified split for the dataset"
+    matrix:
+      <<: *prompt_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_labels.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --llm-judge-prompt qa_orgad_et_al_eval
+      --llm-judge-llm-api gpt_4o_mini
+    deps:
+      - scripts/dataset/generate_labels.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_results_gpt_4o_mini_qa_orgad_et_al_eval.json
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/llm_judge/llm_judge_config_gpt_4o_mini_qa_orgad_et_al_eval.yaml
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+        : cache: false
+
+  generate_split_prompt_ablation:
+    desc: "Based on the labels, generates stratified split for the dataset"
+    matrix:
+      <<: *prompt_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_split.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --test-size 0.2
+      --seed 42
+      --overwrite
+    deps:
+      - scripts/dataset/generate_split.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+    outs:
+      - ? ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/split.pt
+        : cache: false
+
+  train_attn_vs_laplacian_pca_prompt_ablation:
+    desc: "Runs probe experiments for different prompts ablation"
+    matrix:
+      <<: *prompt_ablation_matrix
+    cmd: >-
+      PYTHONPATH=. python scripts/probes/train_attn_vs_laplacian.py
+      --dataset-dir ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}
+      --pca-dim 512
+    deps:
+      - scripts/probes/train_attn_vs_laplacian.py
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/attn_diags.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/features/laplacian_diags.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/labels.pt
+      - ./data/activations/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/split.pt
+    outs:
+      - ./data/results/${item.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.prompt}__seed_${item.seed}/attn_vs_laplacian_pca_512_results.pkl
+
+  ### ===================================== Ablation Analyses =========================================== ###
+  compute_ablation_generalization_metrics:
+    desc: "Run experiments for generalization analysis"
+    matrix:
+      llm:
+        - llama_3.1_8b_instruct
+      temp:
+        - temp_1.0
+      seed:
+        - seed_42
+      top_eigvals:
+        - 100
+      pca_dim:
+        - 512
+    cmd: >-
+      python scripts/ablations/check_generalization.py
+      --llm ${item.llm}
+      --temp ${item.temp}
+      --seed ${item.seed}
+      --top-eigvals ${item.top_eigvals}
+      --pca-dim ${item.pca_dim}
+      --output-file data/studies/ablation_generalization/generalization_metrics_${item.llm}__${item.temp}__${item.seed}__eigvals_${item.top_eigvals}__pca_dim_${item.pca_dim}.json
+    deps:
+      - scripts/ablations/check_generalization.py
+    outs:
+      - data/studies/ablation_generalization/generalization_metrics_${item.llm}__${item.temp}__${item.seed}__eigvals_${item.top_eigvals}__pca_dim_${item.pca_dim}.json
+
+  compute_ablation_generalization_metrics_on_hidden_states:
+    desc: "Run experiments for generalization analysis on hidden states"
+    matrix:
+      llm:
+        - llama_3.1_8b_instruct
+      generation_config:
+        - temp_1.0__prompt_qa_short_few_shot_sep__seed_42
+      pca_dim:
+        - null
+        - 512
+    cmd: >-
+      python scripts/ablations/check_generalization_hidden_states.py
+      --llm ${item.llm}
+      --gen-config ${item.generation_config}
+      --pca-dim ${item.pca_dim}
+      --output-file data/studies/ablation_generalization/generalization_metrics_hidden_states_${item.llm}__${item.generation_config}__pca_dim_${item.pca_dim}.json
+    deps:
+      - scripts/ablations/check_generalization_hidden_states.py
+    outs:
+      - data/studies/ablation_generalization/generalization_metrics_hidden_states_${item.llm}__${item.generation_config}__pca_dim_${item.pca_dim}.json
+
+
+  compute_ablation_temperature_metrics:
+    desc: "Run experiments for temperature ablation"
+    matrix:
+      dataset:
+        - trivia_qa
+      llm:
+        - llama_3.1_8b_instruct
+      prompt:
+        - prompt_qa_short_few_shot_sep
+      seed:
+        - seed_42
+      top_eigval:
+        - 100
+      pca_dim:
+        - 512
+    cmd: >-
+      python scripts/ablations/check_temperatures.py
+      --dataset ${item.dataset}
+      --prompt ${item.prompt}
+      --seed ${item.seed}
+      --top-eigval ${item.top_eigval}
+      --llm ${item.llm}
+      --pca-dim ${item.pca_dim}
+      --output-file data/studies/ablation_temperature/temperature_metrics_${item.dataset}__${item.llm}__${item.prompt}__${item.seed}__${item.top_eigval}__pca_dim_${item.pca_dim}.json
+    deps:
+      - scripts/ablations/check_temperatures.py
+    outs:
+      - data/studies/ablation_temperature/temperature_metrics_${item.dataset}__${item.llm}__${item.prompt}__${item.seed}__${item.top_eigval}__pca_dim_${item.pca_dim}.json
+
+  ### ===================================== Hidden States Baselines =========================================== ###
+  generate_hidden_states_for_selected_tokens:
+    desc: "Generate hidden states for the last token of input and last generated token (hidden states baselines)"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/dataset/generate_activations.py
+      dataset=${item.dataset_prompt.dataset}
+      llm=${item.llm}
+      generation_config=${item.generation_config}
+      prompt=qa/${item.dataset_prompt.prompt}
+      stored_features=hidden_states_for_last_input_last_gen_tokens
+      batch_size=1
+      results_dir=./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      random_seed=${item.seed}
+    deps:
+      - scripts/dataset/generate_activations.py
+      - config/llm/${item.llm}.yaml
+      - config/generation_config/${item.generation_config}.yaml
+      - config/dataset/${item.dataset_prompt.dataset}.yaml
+      - config/generate_activations.yaml
+      - config/prompt/qa/${item.dataset_prompt.prompt}.yaml
+    outs:
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/hidden_states
+        : cache: false
+      - ? ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/hidden_states_for_last_input_last_gen_tokens.pt
+        : cache: false
+
+  train_hidden_states_baselines:
+    desc: "Run probe experiments for hidden states baselines (due to deterministic implementation, labels from generation of attention features are used)"
+    matrix:
+      <<: *act_attn_only_config
+    cmd: >-
+      PYTHONPATH=. python scripts/probes/train_hidden_state_baselines.py
+      --dataset-dir ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}
+      --pca-dim 512
+    deps:
+      - scripts/probes/train_hidden_state_baselines.py
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/features/hidden_states_for_last_input_last_gen_tokens.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/labels.pt
+      - ./data/activations/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/split.pt
+    outs:
+      - data/results/${item.dataset_prompt.dataset}/${item.llm}/${item.generation_config}__prompt_qa_${item.dataset_prompt.prompt}__seed_${item.seed}/hs_baselines_pca_512_results.pkl
+
+
+### ===================================== Perturbation Analysis =========================================== ###
+  run_perturbation_analysis:
+    desc: "Run perturbation analysis (assess robustness of the model to perturbations in the input features)"
+    cmd: >-
+      PYTHONPATH=. python scripts/ablations/perturbation_study.py
+      --root-dir data/activations/trivia_qa/llama_3.1_8b_instruct/temp_1.0__prompt_qa_short_few_shot_sep__seed_42
+      --output-dir data/studies/perturbation/trivia_qa/llama_3.1_8b_instruct/temp_1.0__prompt_qa_short_few_shot_sep__seed_42
+    deps:
+      - scripts/ablations/perturbation_study.py
+    outs:
+      - data/studies/perturbation/trivia_qa/llama_3.1_8b_instruct/temp_1.0__prompt_qa_short_few_shot_sep__seed_42/perturbation_analysis_with_fraction_of_features.pt

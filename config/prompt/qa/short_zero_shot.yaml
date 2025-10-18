@@ -1,0 +1,6 @@
+content: |
+  Answer the following question as briefly as possible.
+  Question: {question}
+  Answer:
+question_key: question
+context_key: null

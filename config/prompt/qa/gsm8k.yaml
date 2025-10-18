@@ -1,0 +1,7 @@
+content: |
+  Given the following problem, reason and give a final answer to the problem.
+
+  Problem: {question}
+  Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.
+question_key: question
+context_key: null

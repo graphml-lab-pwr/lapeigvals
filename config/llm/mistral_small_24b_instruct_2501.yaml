@@ -1,0 +1,8 @@
+name: mistralai/Mistral-Small-24B-Instruct-2501
+tokenizer_name: ${.name}
+tokenizer_padding_side: left
+context_size: 32_000
+compile: true
+torch_dtype: bfloat16
+attn_implementation: eager
+quantization: null

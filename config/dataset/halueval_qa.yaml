@@ -1,0 +1,6 @@
+name: halueval_qa
+path: data/datasets/halueval/qa_data.json
+cls_path: hallucinations.config.QaDatasetConfig
+test_split_name: null # no splits are provided for this dataset (its hallucinations dataset)
+max_answer_tokens: 120 # llama-3.1 tokenizer (without special tokens)
+target_column_name: answer

@@ -1,0 +1,7 @@
+name: squad_v2
+path: data/datasets/squad_v2/dev-v2.0.json
+subset: null
+cls_path: hallucinations.config.QaDatasetConfig
+test_split_name: null
+max_answer_tokens: 43 # llama-3.1 tokenizer (without special tokens)
+target_column_name: answer

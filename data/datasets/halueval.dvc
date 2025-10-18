@@ -1,0 +1,6 @@
+outs:
+- md5: b115c3c6563791df3d48131c5f6e3355.dir
+  size: 63448335
+  nfiles: 4
+  hash: md5
+  path: halueval
